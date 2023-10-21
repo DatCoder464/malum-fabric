@@ -8,11 +8,13 @@ pluginManagement {
             name 'Fabric'
             url 'https://maven.fabricmc.net/'
         }
-        maven {
-            name 'Cotton'
-            url 'https://maven.bai.lol/artifactory/libs-release/'
-        }
-        mavenCentral()
+		
+		maven {
+			url "https://jitpack.io"
+			content {
+				includeGroup "com.github.DatCoder464"
+			}
+		}
         gradlePluginPortal()
     }
 }
