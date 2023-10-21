@@ -1,13 +1,27 @@
 plugins {
-	id 'maven-publish'
-	id 'fabric-loom' version '0.10-SNAPSHOT'
+	id "fabric-loom" version "1.0.+"
+	id "io.github.juuxel.loom-quiltflower" version "1.+" // Quiltflower, a better decompiler
+	id "io.github.p03w.machete" version "1.+" // automatic jar compressing on build
+	id "maven-publish"
 }
 
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+
 archivesBaseName = project.archives_base_name
-version = project.version
 group = project.maven_group
 
+// Formats the mod version to include the Minecraft version and build number (if present)
+// example: 1.0.0+1.18.2-100
+String buildNumber = System.getenv("GITHUB_RUN_NUMBER")
+version = "${version}+${minecraft_version}" + (buildNumber != null ? "-${buildNumber}" : "")
+
 repositories {
+	maven { url = "https://maven.shedaniel.me/" } // Cloth Config, REI
+	maven { url = "https://maven.parchmentmc.org" } // Parchment mappings
+	maven { url = "https://maven.quiltmc.org/repository/release" } // Quilt Mappings
+	maven { url = "https://api.modrinth.com/maven" } // LazyDFU
+	maven { url = "https://maven.terraformersmc.com/releases/" } // Mod Menu
 	maven {
 	    url 'https://api.modrinth.com/maven'
 	    content {
@@ -24,9 +38,10 @@ repositories {
 	}
 
 	maven { url 'https://maven.quiltmc.org/repository/snapshot' }
-	maven { url 'https://jitpack.io' }
-	maven { url "https://maven.shedaniel.me" }
-	maven { url "https://maven.parchmentmc.org"}
+	maven {
+		//url 'https://masa.dy.fi/maven'
+		url 'https://jitpack.io' // masa's maven is currently down, but that won't let me down
+	}
 	mavenCentral()
 }
 
@@ -35,66 +50,75 @@ loom {
 }
 
 dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.layered() {
-		officialMojangMappings()
-		parchment("org.parchmentmc.data:parchment-1.18.2:2022.11.06@zip")
-	}
-	//modImplementation(libs.cardinal.components.entity) {
-	//	exclude group: "net.fabricmc"
-	//	exclude group: "net.fabricmc.fabric-api"
-	//}
-	//modImplementation(libs.cardinal.components.base) {
-	//	exclude group: "net.fabricmc"
-	//	exclude group: "net.fabricmc.fabric-api"
-	//}
+	// Setup
+	minecraft("com.mojang:minecraft:${minecraft_version}")
+	mappings(loom.layered {
+		it.mappings("org.quiltmc:quilt-mappings:${minecraft_version}+build.${qm_version}:intermediary-v2")
+		it.parchment("org.parchmentmc.data:parchment-${minecraft_version}:${parchment_version}@zip")
+		it.officialMojangMappings { nameSyntheticMembers = false }
+	})
+	modImplementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
 
-	modImplementation "dev.emi:trinkets:${trinkets_version}"
+	// dependencies
+	modImplementation("net.fabricmc.fabric-api:fabric-api:${fabric_api_version}")
+
+
+	modImplementation("dev.emi:trinkets:${trinkets_version}")
 
 	//midnightlib = { module = "maven.modrinth:midnightlib", version.ref = "midnightlib"}
-	modImplementation "com.demonwav.mcdev:annotations:${annotations_version}"
-	modImplementation "com.github.Chocohead:Fabric-ASM:${fabric_asm_version}"
-	modImplementation "maven.modrinth:isnrmn:${isnrmn_version}"
-	modImplementation "dev.emi:emi:${emi_version}" { transitive false }
+	modImplementation("com.demonwav.mcdev:annotations:${annotations_version}")
+	modImplementation("com.github.Chocohead:Fabric-ASM:${fabric_asm_version}")
+	modImplementation("maven.modrinth:isnrmn:${isnrmn_version}")
+	modCompileOnly("dev.emi:emi:$emi_version") { transitive = false }
 
-	//modRuntimeOnly("maven.modrinth:sodium:mc1.19.3-0.4.6")
-	//modRuntimeOnly("maven.modrinth:iris:1.19.3-v1.4.6")
+	modRuntimeOnly("maven.modrinth:sodium:mc1.19.3-0.4.6")
+	modRuntimeOnly("maven.modrinth:iris:1.19.3-v1.4.6")
 
-	//runtimeOnly compileOnly("org.anarres:jcpp:1.4.14") // for iris
+	runtimeOnly compileOnly("org.anarres:jcpp:1.4.14") // for iris
+	modRuntimeOnly ("carpet:fabric-carpet:${project.minecraft_version}-${project.carpet_core_version}") { transitive = false }
 
-	//modImplementation include("com.github.Arathain:LodestoneLib-Quilt:1.19.3-SNAPSHOT")
-	modImplementation include "com.github.DatCoder464:LodestoneLib-Fabric:1.18.2-SNAPSHOT"
-	include "com.github.Chocohead:Fabric-ASM:${fabric_asm_version}"
+	modImplementation("com.github.DatCoder464:LodestoneLib-Fabric:1.18.2-SNAPSHOT")
+	modImplementation("com.github.Chocohead:Fabric-ASM:${fabric_asm_version}")
 	//include(libs.satin)
+	modImplementation include("io.github.ladysnake:satin:${project.satin_version}")
+	modImplementation include("maven.modrinth:midnightlib:$midnightlib_version")
 
-	implementation "com.github.LlamaLad7:MixinExtras:${mixin_extras_version}"
-	include "com.github.LlamaLad7:MixinExtras:${mixin_extras_version}"
+	modImplementation("com.github.LlamaLad7:MixinExtras:${mixin_extras_version}")
+	modImplementation("com.github.LlamaLad7:MixinExtras:${mixin_extras_version}")
 
 	annotationProcessor "com.github.LlamaLad7:MixinExtras:${mixin_extras_version}"
 }
 
 processResources {
-	inputs.property "version", version
+	Map<String, String> properties = new HashMap<>()
+	properties.put("version", version)
+	properties.put("fabric_loader_version", fabric_loader_version)
+	properties.put("fabric_api_version", fabric_api_version)
+	properties.put("minecraft_version", minecraft_version)
 
-	filesMatching('quilt.mod.json') {
-		expand "version": version
+	properties.forEach((k, v) -> inputs.property(k, v))
+
+	filesMatching("fabric.mod.json") {
+		expand properties
 	}
 }
 
+machete {
+	// disable machete locally for faster builds
+	enabled = buildNumber != null
+}
+
 tasks.withType(JavaCompile).configureEach {
-	it.options.encoding = "UTF-8"
-	it.options.release = 17
+	it.options.release = Integer.parseInt(sourceCompatibility)
 }
 
 java {
-	sourceCompatibility = JavaVersion.VERSION_17
-	targetCompatibility = JavaVersion.VERSION_17
 	withSourcesJar()
 }
 
 jar {
 	from("LICENSE") {
-		rename { "${it}_${project.archivesBaseName}"}
+		rename { "${it}_${project.archivesBaseName}" }
 	}
 }
 
@@ -105,12 +129,38 @@ publishing {
 		}
 	}
 
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
 	repositories {
-
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
 	}
 }
+loom {
+	//accessWidenerPath = file("src/main/resources/create.accesswidener")
+	sourceSets {
+		main {
+			resources {
+				srcDir("src/generated/resources")
+				exclude("src/generated/resources/.cache")
+			}
+		}
+	}
 
-wrapper {
-	gradleVersion = "7.3.3"
-	distributionType = Wrapper.DistributionType.ALL
+	runs {
+		datagen {
+			client()
+
+			name "Data Generation"
+			vmArg "-Dfabric-api.datagen"
+			vmArg "-Dfabric-api.datagen.output-dir=${file("src/generated/resources")}"
+			vmArg "-Dfabric-api.datagen.modid=create_astra"
+			vmArg "-Dporting_lib.datagen.existing_resources=${file("src/main/resources")}"
+		}
+
+		server {
+			runDir "run/server"
+		}
+	}
 }
